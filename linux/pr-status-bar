@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+"""Your open GitHub PRs in the Linux system tray (AppIndicator / StatusNotifierItem).
+
+Tray menus travel over DBusMenu, which carries plain text only: no colors, no
+tooltips, no custom widgets. So each row is emoji cells followed by the title,
+and the Legend submenu stands in for the hover help of the macOS app.
+"""
+import os
+import shutil
+import sys
+import webbrowser
+from datetime import datetime
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+
+import gi  # noqa: E402
+
+gi.require_version("Gtk", "3.0")
+try:
+    gi.require_version("AyatanaAppIndicator3", "0.1")
+    from gi.repository import AyatanaAppIndicator3 as AppIndicator  # noqa: E402
+except ValueError:
+    gi.require_version("AppIndicator3", "0.1")
+    from gi.repository import AppIndicator3 as AppIndicator  # noqa: E402
+from gi.repository import Gio, GLib, Gtk  # noqa: E402
+
+import pr_status_core as core  # noqa: E402
+
+INTERVAL_SECONDS = 120
+TITLE_WIDTH = 70
+
+# Autostarted sessions don't always carry the shell PATH.
+GH_CANDIDATES = [
+    os.path.expanduser("~/.local/bin/gh"),
+    "/home/linuxbrew/.linuxbrew/bin/gh",
+    "/usr/local/bin/gh",
+    "/usr/bin/gh",
+    "/snap/bin/gh",
+]
+
+LEGEND = [
+    "✅ ready   ❗ needs you   ⏳ waiting on others",
+    "👍 approved   ⛔ changes requested   👀 review required",
+    "⭐ senior approved   ➖ no senior approval",
+    "🟢 CI passing   🔴 CI failing   🟡 CI running   ➖ no CI",
+    "🔀 no conflicts   💥 conflicts   ✏️ draft",
+    "💬 unresolved threads",
+]
+
+
+def find_gh():
+    return shutil.which("gh") or next((p for p in GH_CANDIDATES if os.access(p, os.X_OK)), None)
+
+
+def row_label(pr: core.PullRequest) -> str:
+    status = "✅" if pr.is_ready else "❗" if pr.needs_author else "⏳"
+    review = {"APPROVED": "👍", "CHANGES_REQUESTED": "⛔"}.get(pr.review_decision, "👀")
+    senior = "⭐" if pr.senior_approved else "➖"
+    checks = {"SUCCESS": "🟢", "FAILURE": "🔴", "ERROR": "🔴", "PENDING": "🟡", "EXPECTED": "🟡"}.get(pr.checks, "➖")
+    merge = "✏️" if pr.is_draft else "💥" if pr.has_conflicts else "🔀"
+    threads = f" 💬{pr.open_threads}" if pr.open_threads else ""
+    title = pr.title if len(pr.title) <= TITLE_WIDTH else pr.title[: TITLE_WIDTH - 1] + "…"
+    # Fixed-width cells first, so rows line up even in a proportional menu font.
+    return f"{status}  {review}{senior}{checks}{merge}{threads}  #{pr.number} {title}"
+
+
+class App:
+    def __init__(self):
+        self.indicator = AppIndicator.Indicator.new(
+            "pr-status-bar", "view-refresh", AppIndicator.IndicatorCategory.APPLICATION_STATUS
+        )
+        self.indicator.set_title("PR Status Bar")
+        self.indicator.set_status(AppIndicator.IndicatorStatus.ACTIVE)
+        self.busy = False
+        self.last_updated = None
+        self.show("view-refresh", "", [self.note("Loading…")])
+        self.refresh()
+        GLib.timeout_add_seconds(INTERVAL_SECONDS, self.on_tick)
+
+    def on_tick(self):
+        self.refresh()
+        return GLib.SOURCE_CONTINUE
+
+    def refresh(self):
+        if self.busy:
+            return
+        gh = find_gh()
+        if gh is None:
+            self.show_error("gh CLI not found. Install it, then run gh auth login")
+            return
+        try:
+            process = Gio.Subprocess.new(
+                [gh, "api", "graphql", "-f", "query=" + core.GRAPHQL],
+                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE,
+            )
+        except GLib.Error as error:
+            self.show_error(error.message)
+            return
+        self.busy = True
+        process.communicate_utf8_async(None, None, self.on_response)
+
+    def on_response(self, process, result):
+        self.busy = False
+        try:
+            _, out, err = process.communicate_utf8_finish(result)
+            if not process.get_successful():
+                raise RuntimeError((err or "").strip() or "gh exited with an error")
+            prs = core.parse(out)
+        except Exception as error:  # surface anything in the menu rather than dying silently
+            self.show_error(str(error))
+            return
+        self.last_updated = datetime.now()
+
+        summary = core.Summary.of(prs)
+        icon = "emblem-important" if summary.needs_author else "emblem-default"
+        items = [self.pr_item(pr) for pr in prs] or [self.note("No open PRs. Go touch grass.")]
+        self.show(icon, summary.label, items)
+
+    def show_error(self, message):
+        first_line = message.splitlines()[0] if message else "Unknown error"
+        self.show("dialog-error", "", [self.note("⚠️ " + first_line[:120])])
+
+    def show(self, icon, label, items):
+        self.indicator.set_icon_full(icon, "PR status")
+        self.indicator.set_label(label, "99✓ 99!")
+
+        menu = Gtk.Menu()
+        for item in items:
+            menu.append(item)
+        menu.append(Gtk.SeparatorMenuItem())
+
+        legend = Gtk.Menu()
+        for line in LEGEND:
+            legend.append(self.note(line))
+        legend_item = Gtk.MenuItem.new_with_label("Legend")
+        legend_item.set_submenu(legend)
+        menu.append(legend_item)
+
+        if self.last_updated:
+            menu.append(self.note("Updated " + self.last_updated.strftime("%H:%M")))
+        menu.append(self.action("Refresh", lambda _: self.refresh()))
+        menu.append(self.action("Quit", lambda _: Gtk.main_quit()))
+        menu.show_all()
+        self.indicator.set_menu(menu)
+
+    def pr_item(self, pr):
+        return self.action(row_label(pr), lambda _: webbrowser.open(pr.url))
+
+    @staticmethod
+    def note(text):
+        item = Gtk.MenuItem.new_with_label(text)
+        item.set_sensitive(False)
+        return item
+
+    @staticmethod
+    def action(text, callback):
+        item = Gtk.MenuItem.new_with_label(text)
+        item.connect("activate", callback)
+        return item
+
+
+def main():
+    App()
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()

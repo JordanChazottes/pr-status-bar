@@ -2,3 +2,4 @@
 *.app
 .claude/
 .swiftpm/
+__pycache__/

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=PR Status Bar
+Comment=Your open GitHub PRs in the system tray
+Exec=@EXEC@
+Icon=emblem-default
+Terminal=false
+Categories=Development;
+X-GNOME-Autostart-enabled=true

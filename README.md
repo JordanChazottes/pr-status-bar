@@ -1,6 +1,6 @@
 # PR Status Bar
 
-Your open GitHub PRs in the macOS menu bar.
+Your open GitHub PRs in the macOS menu bar (and the Linux tray, see [Linux](#linux)).
 
 Menu bar reads `ready/total` with a seal when nothing needs you, or
 `2✓ 3!` (2 ready, 3 waiting on you) otherwise. The dropdown lists each PR with:
@@ -25,6 +25,27 @@ open -a PRStatusBar
 
 Requires an Apple Silicon Mac on macOS 13+. It has no auth of its own: it shells out to
 the `gh` CLI (installed by the cask), so `gh auth login` is all it needs.
+
+## Linux
+
+A tray version lives in `linux/`: Python + GTK3 AppIndicator, same query, same ready and
+needs-you rules. It works anywhere that shows AppIndicator / StatusNotifierItem icons: KDE,
+XFCE, Cinnamon, Waybar's tray, and GNOME with the AppIndicator extension (preinstalled on
+Ubuntu; `gnome-shell-extension-appindicator` on Fedora).
+
+```sh
+# Debian/Ubuntu (Fedora: python3-gobject libayatana-appindicator-gtk3,
+# Arch: python-gobject libayatana-appindicator)
+sudo apt install python3-gi gir1.2-ayatanaappindicator3-0.1 gh
+gh auth login
+./linux/install.sh            # installs to ~/.local, autostarts on login, launches
+./linux/install.sh uninstall
+```
+
+Tray menus are plain text (no colors, no hover), so each row is a strip of emoji cells
+before the title, and a Legend submenu explains them. The `ready/total` label sits next to
+the icon on GNOME and Unity; KDE shows only the icon. Tests: `cd linux && python3 -m unittest`.
+Team, org and search query live at the top of `linux/pr_status_core.py`.
 
 ## Build from source
 
