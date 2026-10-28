@@ -11,7 +11,8 @@ struct MenuContentView: View {
             Divider()
             footer
         }
-        .frame(width: 460)
+        .frame(width: 760)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder
@@ -26,16 +27,24 @@ struct MenuContentView: View {
         case .loaded(let prs) where prs.isEmpty:
             Text("No open PRs. Go touch grass.").foregroundStyle(.secondary).padding()
         case .loaded(let prs):
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(prs) { pr in
-                        Button { openURL(pr.url) } label: { PRRow(pr: pr) }
-                            .buttonStyle(.plain)
-                        Divider()
-                    }
-                }
+            PRHeader()
+            Divider()
+            // Size to the rows, and only scroll once they outgrow the popup.
+            ViewThatFits(in: .vertical) {
+                rows(prs)
+                ScrollView { rows(prs) }
             }
             .frame(maxHeight: 520)
+        }
+    }
+
+    private func rows(_ prs: [PullRequest]) -> some View {
+        VStack(spacing: 0) {
+            ForEach(prs) { pr in
+                Button { openURL(pr.url) } label: { PRRow(pr: pr) }
+                    .buttonStyle(.plain)
+                Divider()
+            }
         }
     }
 
@@ -53,71 +62,111 @@ struct MenuContentView: View {
     }
 }
 
+private enum Column {
+    static let number: CGFloat = 52
+    static let cell: CGFloat = 46
+}
+
+struct PRHeader: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            Color.clear.frame(width: 14, height: 1)
+            Text("PR").frame(width: Column.number, alignment: .leading)
+            Text("Title").frame(maxWidth: .infinity, alignment: .leading)
+            ForEach(["Review", "Senior", "Threads", "CI", "Merge"], id: \.self) {
+                Text($0).frame(width: Column.cell)
+            }
+        }
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+}
+
 private struct PRRow: View {
     let pr: PullRequest
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Image(systemName: pr.isReady ? "checkmark.circle.fill" : pr.needsAuthor ? "exclamationmark.circle.fill" : "clock")
-                    .foregroundStyle(pr.isReady ? .green : pr.needsAuthor ? .orange : .secondary)
-                Text(pr.title).lineLimit(1).font(.system(size: 13, weight: .medium))
-            }
-            HStack(spacing: 10) {
-                Text("\(pr.repo.split(separator: "/").last ?? "")#\(pr.number)")
-                    .foregroundStyle(.secondary)
-                if pr.isDraft { Badge("Draft", "pencil", .secondary) }
-                review
-                senior
-                if pr.openThreads > 0 { Badge("\(pr.openThreads)", "bubble.left", .orange, help: "Unresolved threads") }
-                checks
-                if pr.hasConflicts { Badge("Conflicts", "arrow.triangle.merge", .red) }
-            }
-            .font(.caption)
+        HStack(spacing: 8) {
+            Image(systemName: pr.isReady ? "checkmark.circle.fill" : pr.needsAuthor ? "exclamationmark.circle.fill" : "clock")
+                .foregroundStyle(pr.isReady ? .green : pr.needsAuthor ? .orange : .secondary)
+                .frame(width: 14)
+            Text("#" + String(pr.number))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(width: Column.number, alignment: .leading)
+                .help(pr.repo)
+            Text(pr.title)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .help(pr.title)
+            review
+            senior
+            Cell(pr.openThreads > 0 ? "bubble.left.fill" : "bubble.left", pr.openThreads > 0 ? .orange : .secondary,
+                 text: pr.openThreads > 0 ? "\(pr.openThreads)" : nil, help: "\(pr.openThreads) unresolved thread(s)")
+            checks
+            merge
         }
+        .font(.system(size: 12))
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
     }
 
     @ViewBuilder private var review: some View {
         switch pr.reviewDecision {
-        case .approved: Badge("Approved", "hand.thumbsup", .green, help: pr.approvers.joined(separator: ", "))
-        case .changesRequested: Badge("Changes", "xmark.octagon", .red, help: pr.changesRequestedBy.joined(separator: ", "))
-        case .reviewRequired, nil: Badge("Review", "eye", .secondary, help: pr.approvers.joined(separator: ", "))
+        case .approved: Cell("hand.thumbsup.fill", .green, help: "Approved by \(pr.approvers.joined(separator: ", "))")
+        case .changesRequested: Cell("xmark.octagon.fill", .red, help: "Changes requested by \(pr.changesRequestedBy.joined(separator: ", "))")
+        case .reviewRequired, nil:
+            Cell("eye", .secondary, help: pr.approvers.isEmpty ? "Review required" : "Review required, approved by \(pr.approvers.joined(separator: ", "))")
         }
     }
 
     @ViewBuilder private var senior: some View {
         if pr.seniorApproved {
-            Badge("Senior", "star.fill", .green, help: pr.seniorApprovers.joined(separator: ", "))
+            Cell("star.fill", .green, help: "Senior approval: \(pr.seniorApprovers.joined(separator: ", "))")
         } else {
-            Badge("Senior", "star", .secondary, help: "No Activation Senior Engineer approval yet")
+            Cell("star", .secondary, help: "No Activation Senior Engineer approval yet")
         }
     }
 
     @ViewBuilder private var checks: some View {
         switch pr.checks {
-        case .success: Badge("CI", "checkmark", .green)
-        case .failure, .error: Badge("CI", "xmark", .red)
-        case .pending, .expected: Badge("CI", "circle.dotted", .yellow)
-        case nil: EmptyView()
+        case .success: Cell("checkmark.circle.fill", .green, help: "CI passing")
+        case .failure, .error: Cell("xmark.circle.fill", .red, help: "CI failing")
+        case .pending, .expected: Cell("circle.dotted", .yellow, help: "CI running")
+        case nil: Cell("minus", .secondary, help: "No CI")
+        }
+    }
+
+    @ViewBuilder private var merge: some View {
+        if pr.isDraft {
+            Cell("pencil", .secondary, help: "Draft")
+        } else if pr.hasConflicts {
+            Cell("arrow.triangle.merge", .red, help: "Merge conflicts")
+        } else {
+            Cell("arrow.triangle.merge", .green, help: "No conflicts")
         }
     }
 }
 
-private struct Badge: View {
-    let text: String, symbol: String, color: Color, help: String
+private struct Cell: View {
+    let symbol: String, color: Color, text: String?, help: String
 
-    init(_ text: String, _ symbol: String, _ color: Color, help: String = "") {
-        self.text = text; self.symbol = symbol; self.color = color; self.help = help
+    init(_ symbol: String, _ color: Color, text: String? = nil, help: String) {
+        self.symbol = symbol; self.color = color; self.text = text; self.help = help
     }
 
     var body: some View {
-        Label(text, systemImage: symbol)
-            .labelStyle(.titleAndIcon)
-            .foregroundStyle(color)
-            .help(help)
+        HStack(spacing: 2) {
+            Image(systemName: symbol)
+            if let text { Text(text).monospacedDigit() }
+        }
+        .foregroundStyle(color)
+        .frame(width: Column.cell)
+        .help(help)
     }
 }
