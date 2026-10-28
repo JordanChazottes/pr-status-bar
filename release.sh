@@ -28,9 +28,10 @@ ZIP="PRStatusBar-$VERSION.zip"
 ditto -ck --keepParent PRStatusBar.app ".build/$ZIP"
 SHA="$(shasum -a 256 ".build/$ZIP" | awk '{print $1}')"
 
-git tag "v$VERSION"
-git push "https://github.com/$REPO.git" "v$VERSION"
-gh release create "v$VERSION" ".build/$ZIP" --repo "$REPO" --title "v$VERSION" \
+# GitHub creates the tag on this commit, so it must already be pushed.
+COMMIT="$(git rev-parse HEAD)"
+gh api "repos/$REPO/commits/$COMMIT" --silent 2>/dev/null || { echo "Push $COMMIT to $REPO first" >&2; exit 1; }
+gh release create "v$VERSION" ".build/$ZIP" --repo "$REPO" --target "$COMMIT" --title "v$VERSION" \
     --notes "brew tap $OWNER/pr-status-bar && brew install --cask pr-status-bar"
 
 current="$(gh api "repos/$TAP/contents/$CASK_PATH")"
