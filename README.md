@@ -1,7 +1,6 @@
 # PR Status Bar
 
-Your open GitHub PRs in the macOS menu bar, inspired by
-[claude-usage-bar](https://github.com/sdelanos/claude-usage-bar).
+Your open GitHub PRs in the macOS menu bar.
 
 Menu bar reads `ready/total` with a seal when nothing needs you, or
 `2✓ 3!` (2 ready, 3 waiting on you) otherwise. The dropdown lists each PR with:
