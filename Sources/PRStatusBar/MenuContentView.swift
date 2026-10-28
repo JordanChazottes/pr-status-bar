@@ -29,21 +29,23 @@ struct MenuContentView: View {
         case .loaded(let prs):
             PRHeader()
             Divider()
-            // Size to the rows, and only scroll once they outgrow the popup.
-            ViewThatFits(in: .vertical) {
+            // A ScrollView has no ideal height, so a MenuBarExtra window collapses
+            // it to zero. Only scroll when the rows outgrow the cap, at a fixed height.
+            if CGFloat(prs.count) * PRRow.height > Self.maxListHeight {
+                ScrollView { rows(prs) }.frame(height: Self.maxListHeight)
+            } else {
                 rows(prs)
-                ScrollView { rows(prs) }
             }
-            .frame(maxHeight: 520)
         }
     }
+
+    private static let maxListHeight: CGFloat = 520
 
     private func rows(_ prs: [PullRequest]) -> some View {
         VStack(spacing: 0) {
             ForEach(prs) { pr in
                 Button { openURL(pr.url) } label: { PRRow(pr: pr) }
                     .buttonStyle(.plain)
-                Divider()
             }
         }
     }
@@ -85,6 +87,8 @@ struct PRHeader: View {
 }
 
 private struct PRRow: View {
+    static let height: CGFloat = 28
+
     let pr: PullRequest
 
     var body: some View {
@@ -111,8 +115,8 @@ private struct PRRow: View {
         }
         .font(.system(size: 12))
         .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: Self.height, maxHeight: Self.height, alignment: .leading)
+        .overlay(alignment: .bottom) { Color(nsColor: .separatorColor).frame(height: 1) }
         .contentShape(Rectangle())
     }
 
