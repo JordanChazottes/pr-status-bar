@@ -16,11 +16,18 @@ Menu bar reads `ready/total` with a seal when nothing needs you, or
 
 Click a row to open the PR. Polls every 2 minutes.
 
-## Auth
+## Install
 
-None of its own: it shells out to the `gh` CLI, so `gh auth login` is all it needs.
+```sh
+brew tap JordanChazottes/pr-status-bar
+brew install --cask pr-status-bar
+open -a PRStatusBar
+```
 
-## Build
+Requires an Apple Silicon Mac on macOS 13+. It has no auth of its own: it shells out to
+the `gh` CLI (installed by the cask), so `gh auth login` is all it needs.
+
+## Build from source
 
 ```sh
 ./build.sh          # PRStatusBar.app
@@ -33,3 +40,17 @@ Command Line Tools, and the CLT ships without the SwiftUI macro plugin, so avoid
 `@State` (and other SwiftUI macros) in views.
 
 Team, org and search query live in `Config` in `Sources/PRStatusCore/GitHubResponse.swift`.
+
+## Release
+
+```sh
+./release.sh 0.2.0
+```
+
+Builds and tests on this Mac, publishes `PRStatusBar-0.2.0.zip` as a GitHub release and
+bumps the cask in [homebrew-pr-status-bar](https://github.com/JordanChazottes/homebrew-pr-status-bar).
+The source of that cask lives in `homebrew/Casks/`.
+
+## License
+
+MIT

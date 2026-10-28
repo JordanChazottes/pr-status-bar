@@ -31,6 +31,10 @@ rm -rf "$APP.app"
 mkdir -p "$APP.app/Contents/MacOS"
 cp "$OUT/$APP" "$APP.app/Contents/MacOS/$APP"
 cp Info.plist "$APP.app/Contents/Info.plist"
+if [[ -n "${VERSION:-}" ]]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" -c "Set :CFBundleVersion $VERSION" \
+        "$APP.app/Contents/Info.plist"
+fi
 codesign --force --sign - "$APP.app"
 echo "✅ Built $APP.app"
 
