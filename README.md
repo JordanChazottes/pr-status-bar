@@ -1,6 +1,6 @@
 # PR Status Bar
 
-Your open GitHub PRs in the macOS menu bar (and the Linux tray, see [Linux](#linux)).
+Your open GitHub PRs in the macOS menu bar (and the Linux tray, see [Install (Linux)](#install-linux)).
 
 Menu bar reads `ready/total` with a seal when nothing needs you, or
 `2✓ 3!` (2 ready, 3 waiting on you) otherwise. The dropdown lists each PR with:
@@ -15,7 +15,7 @@ Menu bar reads `ready/total` with a seal when nothing needs you, or
 
 Click a row to open the PR. Polls every 2 minutes.
 
-## Install
+## Install (macOS)
 
 ```sh
 brew tap JordanChazottes/pr-status-bar
@@ -26,21 +26,29 @@ open -a PRStatusBar
 Requires an Apple Silicon Mac on macOS 13+. It has no auth of its own: it shells out to
 the `gh` CLI (installed by the cask), so `gh auth login` is all it needs.
 
-## Linux
+## Install (Linux)
 
-A tray version lives in `linux/`: Python + GTK3 AppIndicator, same query, same ready and
+No Homebrew needed. A tray version lives in `linux/`: Python + GTK3 AppIndicator, same query, same ready and
 needs-you rules. It works anywhere that shows AppIndicator / StatusNotifierItem icons: KDE,
 XFCE, Cinnamon, Waybar's tray, and GNOME with the AppIndicator extension (preinstalled on
 Ubuntu; `gnome-shell-extension-appindicator` on Fedora).
 
 ```sh
-# Debian/Ubuntu (Fedora: python3-gobject libayatana-appindicator-gtk3,
-# Arch: python-gobject libayatana-appindicator)
-sudo apt install python3-gi gir1.2-ayatanaappindicator3-0.1 gh
+# 1. Dependencies, from your distro's package manager
+sudo apt install git python3-gi gir1.2-ayatanaappindicator3-0.1 gh                 # Debian/Ubuntu
+sudo dnf install git python3-gobject libayatana-appindicator-gtk3 gh                # Fedora
+sudo pacman -S git python-gobject libayatana-appindicator github-cli                # Arch
+
+# 2. Log gh in, then install from a clone
 gh auth login
+git clone https://github.com/JordanChazottes/pr-status-bar.git
+cd pr-status-bar
 ./linux/install.sh            # installs to ~/.local, autostarts on login, launches
-./linux/install.sh uninstall
 ```
+
+`./linux/install.sh uninstall` removes it. To update, `git pull` and run `./linux/install.sh`
+again. On Debian older than 12 or Ubuntu older than 22.04, `gh` isn't in the default repos:
+add [GitHub's apt repo](https://github.com/cli/cli/blob/trunk/docs/install_linux.md) first.
 
 Tray menus are plain text (no colors, no hover), so each row is a strip of emoji cells
 before the title, and a Legend submenu explains them. The `ready/total` label sits next to
